@@ -1,0 +1,15 @@
+digraph {
+    0 [ ]
+    1 [ ]
+    2 [ ]
+    3 [ ]
+    4 [ ]
+    0 -> 1 [ label = "Weights([0, 1])" ]
+    0 -> 1 [ label = "Weights([1, 0])" ]
+    1 -> 2 [ label = "Weights([0, 2])" ]
+    1 -> 2 [ label = "Weights([2, 0])" ]
+    2 -> 3 [ label = "Weights([0, 4])" ]
+    2 -> 3 [ label = "Weights([4, 0])" ]
+    3 -> 4 [ label = "Weights([0, 8])" ]
+    3 -> 4 [ label = "Weights([8, 0])" ]
+}

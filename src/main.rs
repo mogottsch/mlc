@@ -33,7 +33,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-const PRICE_INCREMENT_INTERVAL: u64 = 3;
+const PRICE_INCREMENT_INTERVAL: u64 = 30;
 fn update_label_func(
     old_label: &bag::Label<usize>,
     new_label: &bag::Label<usize>,
@@ -65,14 +65,16 @@ fn run_mlc() {
     let path = std::env::args().nth(1).unwrap();
     // let path = "/home/moritz/dev/uni/mcr-py/data/mlc_edges.csv";
     println!("Reading graph from {}", path);
-    let (g, node_map) = read::read_graph(&path).unwrap();
+    let g = read::read_graph_with_int_ids(&path).unwrap();
 
     println!("Creating MLC runner");
-    let mlc = mlc::MLC::new(g, node_map, Some(update_label_func)).unwrap();
+    let mut mlc = mlc::MLC::new(g).unwrap();
+    mlc.set_update_label_func(update_label_func);
+    // mlc.set_debug(true);
     println!("Running MLC");
     let start = Instant::now();
-    let bags = mlc.run("B11010211890".to_string());
+    let bags = mlc.run_resetted(0);
     let end = Instant::now();
     println!("MLC took {}ms", (end - start).as_millis());
-    mlc::write_bags(&bags, "data/labels.csv").unwrap();
+    // mlc::write_bags(&bags, "data/labels.csv").unwrap();
 }

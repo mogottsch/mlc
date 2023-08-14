@@ -16,7 +16,7 @@ struct UntranslatedEdge {
     hidden_weights: Option<Weights>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Deserialize)]
 struct Edge {
     u: NodeId,
     v: NodeId,
@@ -24,9 +24,17 @@ struct Edge {
     hidden_weights: Option<Weights>,
 }
 
-pub fn read_graph(
+type MLCGraph = Graph<(), WeightsTuple, Undirected>;
+
+// Reads a graph from a csv file. The csv file should have the following format:
+// u,v,weights,hidden_weights
+// where u and v are the node names, weights are the weights of the edge, and hidden_weights are the
+// hidden weights of the edge. The hidden_weights column is optional.
+// The node names can be any string, but they must be unique.
+// The weights and hidden_weights columns must be a comma-separated list of integers.
+pub fn read_graph_and_reset_ids(
     path: &str,
-) -> Result<(Graph<(), WeightsTuple, Undirected>, BiMap<String, usize>), Box<dyn Error>> {
+) -> Result<(MLCGraph, BiMap<String, usize>), Box<dyn Error>> {
     // let mut rdr = csv::Reader::from_path(path)?;
     let mut rdr = csv::ReaderBuilder::new().quote(b'"').from_path(path)?;
 
@@ -68,7 +76,32 @@ pub fn read_graph(
             },
         )
     }));
-    return Ok((g, node_map));
+    Ok((g, node_map))
+}
+
+// Like read_graph_unresetted, but the node ids must be integers from 0 to n-1, where n is the
+// number of nodes in the graph. This function is faster than read_graph_unresetted.
+pub fn read_graph_with_int_ids(path: &str) -> Result<MLCGraph, Box<dyn Error>> {
+    // let mut rdr = csv::Reader::from_path(path)?;
+    let mut rdr = csv::ReaderBuilder::new().quote(b'"').from_path(path)?;
+
+    let mut edges = Vec::new();
+    for result in rdr.deserialize() {
+        let edge: Edge = result?;
+        edges.push(edge);
+    }
+
+    let g = Graph::<(), WeightsTuple, Undirected>::from_edges(edges.iter().map(|e| {
+        (
+            NodeIndex::new(e.u),
+            NodeIndex::new(e.v),
+            WeightsTuple {
+                weights: e.weights.clone().0,
+                hidden_weights: e.hidden_weights.clone().map(|w| w.0),
+            },
+        )
+    }));
+    Ok(g)
 }
 
 impl FromStr for Weights {

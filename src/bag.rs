@@ -19,7 +19,7 @@ pub struct WeightsTuple {
     pub hidden_weights: Option<Vec<Weight>>,
 }
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone)]
 pub struct Label<T> {
     pub values: Vec<u64>,
     pub hidden_values: Option<Vec<u64>>,
@@ -36,22 +36,15 @@ impl Label<NodeId> {
             .zip(weight.weights.iter())
             .map(|(a, b)| a + b)
             .collect();
-        let hidden_values = match &self.hidden_values {
-            Some(hidden_values) => {
-                if let Some(hidden_weights) = &weight.hidden_weights {
-                    Some(
-                        hidden_values
-                            .iter()
-                            .zip(hidden_weights.iter())
-                            .map(|(a, b)| a + b)
-                            .collect(),
-                    )
-                } else {
-                    None
-                }
-            }
-            None => None,
-        };
+        let hidden_values = self.hidden_values.as_ref().and_then(|hidden_values| {
+            weight.hidden_weights.as_ref().map(|hidden_weights| {
+                hidden_values
+                    .iter()
+                    .zip(hidden_weights.iter())
+                    .map(|(a, b)| a + b)
+                    .collect()
+            })
+        });
 
         let mut path = self.path.clone();
         let target_node_id = edge.target().index();
@@ -86,7 +79,7 @@ impl Label<NodeId> {
     }
 }
 
-impl Ord for Label<NodeId> {
+impl<T> Ord for Label<T> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         // lexicographical order, but the smaller the better
         // we need a "min-heap" as queue
@@ -116,10 +109,15 @@ impl<T> PartialEq for Label<T> {
     }
 }
 
-impl Eq for Label<NodeId> {}
-impl Eq for Label<String> {}
+impl<T> Eq for Label<T> {}
 
-#[derive(Debug)]
+impl<T> Hash for Label<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.values.hash(state);
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct Bag<T: Eq + Hash> {
     pub labels: HashSet<Label<T>>,
 }

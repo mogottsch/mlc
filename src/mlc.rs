@@ -5,31 +5,49 @@ use petgraph::visit::EdgeRef;
 use petgraph::{Graph, Undirected};
 use std::collections::{BinaryHeap, HashMap};
 use std::error::Error;
+use std::fmt;
 use std::fmt::Display;
 use std::fs::{read_to_string, File};
 use std::hash::Hash;
 use std::io::Write;
 use std::num::ParseIntError;
 use std::str::FromStr;
+use std::time::Instant;
 
 mod test;
+
+type UpdateLabelFunc = fn(&Label<usize>, &Label<usize>) -> Label<usize>;
 
 pub struct MLC {
     graph: Graph<(), WeightsTuple, Undirected>,
     label_length: usize,
     hidden_label_length: usize,
-    node_map: BiMap<String, usize>,
-    update_label_func: Option<fn(&Label<usize>, &Label<usize>) -> Label<usize>>,
+    node_map: Option<BiMap<String, usize>>,
+    update_label_func: Option<UpdateLabelFunc>,
+    debug: bool,
 }
 
 pub type Bags<T> = HashMap<T, Bag<T>>;
 
+#[derive(Debug)]
+pub enum MLCError {
+    StartNodeNotFound(String),
+}
+
+impl fmt::Display for MLCError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            MLCError::StartNodeNotFound(start_node) => {
+                write!(f, "Start node not found: {}", start_node)
+            } // Handle other error variants if needed
+        }
+    }
+}
+
+impl Error for MLCError {}
+
 impl MLC {
-    pub fn new(
-        g: Graph<(), WeightsTuple, Undirected>,
-        node_map: BiMap<String, usize>,
-        update_label_func: Option<fn(&Label<usize>, &Label<usize>) -> Label<usize>>,
-    ) -> Result<MLC, Box<dyn Error>> {
+    pub fn new(g: Graph<(), WeightsTuple, Undirected>) -> Result<MLC, Box<dyn Error>> {
         if g.edge_count() == 0 {
             return Err("Graph has no edges".into());
         }
@@ -62,20 +80,57 @@ impl MLC {
         Ok(MLC {
             graph: g,
             label_length: n_labels,
-            node_map,
+            node_map: None,
             hidden_label_length: n_hidden_labels,
-            update_label_func,
+            update_label_func: None,
+            debug: false,
         })
     }
 
-    pub fn run(&self, start: String) -> Bags<String> {
-        if let Some(start) = self.node_map.get_by_left(&start) {
-            return self.run_resetted(*start);
-        }
-        panic!("Start node not found");
+    pub fn set_update_label_func(
+        &mut self,
+        update_label_func: fn(&Label<usize>, &Label<usize>) -> Label<usize>,
+    ) {
+        self.update_label_func = Some(update_label_func);
     }
 
-    fn run_resetted(&self, start: usize) -> Bags<String> {
+    pub fn set_debug(&mut self, debug: bool) {
+        self.debug = debug;
+    }
+
+    pub fn set_node_map(&mut self, node_map: BiMap<String, usize>) {
+        self.node_map = Some(node_map);
+    }
+
+    /// Run the MLC algorithm on the graph, starting at the given node.
+    /// Expects node_map to be set.
+    ///
+    /// # Arguments
+    /// * `start` - The node to start the algorithm at. Will be translated to the internal node id.
+    ///
+    /// # Returns
+    /// * `Bags<String>` - The bags of each node, translated to the original node id.
+    pub fn run(&self, start: String) -> Result<Bags<String>, MLCError> {
+        if let Some(start) = self
+            .node_map
+            .as_ref()
+            .expect("node_map must be passed when calling run")
+            .get_by_left(&start)
+        {
+            return Ok(self.translate_bags(&self.run_resetted(*start)));
+        }
+        Err(MLCError::StartNodeNotFound(start))
+    }
+
+    /// Run the MLC algorithm on the graph, starting at the given node.
+    /// The node id is expected to be the integer node id.
+    ///
+    /// # Arguments
+    /// * `start` - The node to start the algorithm at.
+    ///
+    /// # Returns
+    /// * `Bags<usize>` - The bags of each node.
+    pub fn run_resetted(&self, start: usize) -> Bags<usize> {
         let mut queue: BinaryHeap<Label<usize>> = BinaryHeap::new();
         let mut bags: Bags<usize> = HashMap::new();
         let hidden_values = if self.hidden_label_length != usize::MAX {
@@ -93,6 +148,7 @@ impl MLC {
         bags.insert(start, Bag::new_start_bag(start_label));
 
         let mut counter = 0;
+        let mut time = Instant::now();
 
         while let Some(label) = queue.pop() {
             let node_id = label.node_id;
@@ -112,19 +168,32 @@ impl MLC {
             }
 
             counter += 1;
+            // print queue size every 1000 iterations
+            // if debug is enabled, write labels to csv every 10 seconds
             if counter % 1000 == 0 {
                 println!("queue size: {}", queue.len());
-                self.write_bags_as_csv(&self.translate_bags(&bags), "labels.csv");
+                if self.debug {
+                    let duration = time.elapsed();
+                    if duration.as_secs() > 10 {
+                        println!("writing labels to csv");
+                        write_bags(&self.translate_bags(&bags), "data/labels.csv").unwrap();
+                        time = Instant::now();
+                    }
+                }
             }
         }
 
-        self.translate_bags(&bags)
+        bags
     }
 
     fn translate_bags(&self, bags: &Bags<usize>) -> Bags<String> {
+        let node_map = self
+            .node_map
+            .as_ref()
+            .expect("node_map must be passed when calling translate_bags");
         let mut translated_bags: Bags<String> = HashMap::new();
         for (node_id, bag) in bags {
-            let translated_node_id = self.node_map.get_by_right(node_id).unwrap();
+            let translated_node_id = node_map.get_by_right(node_id).unwrap();
             let translated_bag = Bag {
                 labels: bag
                     .labels
@@ -134,7 +203,7 @@ impl MLC {
                         path: label
                             .path
                             .iter()
-                            .map(|n| self.node_map.get_by_right(n).unwrap().to_string())
+                            .map(|n| node_map.get_by_right(n).unwrap().to_string())
                             .collect(),
                         values: label.values.clone(),
                         hidden_values: label.hidden_values.clone(),
@@ -148,33 +217,15 @@ impl MLC {
 
     #[allow(dead_code)]
     fn write_node_map_as_csv(&self, filename: &str) {
+        let node_map = self
+            .node_map
+            .as_ref()
+            .expect("node_map must be passed when calling write_node_map_as_csv");
+
         let mut file = File::create(filename).unwrap();
         writeln!(file, "node_id,mlc_node_id").unwrap();
-        for (key, value) in &self.node_map {
+        for (key, value) in node_map {
             writeln!(file, "{},{}", key, value).unwrap();
-        }
-    }
-
-    #[allow(dead_code)]
-    fn write_bags_as_csv(&self, bags: &Bags<String>, filename: &str) {
-        let mut file = File::create(filename).unwrap();
-        writeln!(file, "node_id|path|values").unwrap();
-        for (node_id, bag) in bags {
-            for label in &bag.labels {
-                writeln!(
-                    file,
-                    "{}|{}|{}",
-                    node_id,
-                    label.path.join(","),
-                    label
-                        .values
-                        .iter()
-                        .map(|v| v.to_string())
-                        .collect::<Vec<String>>()
-                        .join(",")
-                )
-                .unwrap();
-            }
         }
     }
 }

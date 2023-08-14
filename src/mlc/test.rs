@@ -5,9 +5,9 @@ mod tests {
 
     #[test]
     fn test_run_mlc() {
-        let (g, node_map) = read::read_graph("testdata/edges.csv").unwrap();
+        let g = read::read_graph_with_int_ids("testdata/edges.csv").unwrap();
 
-        let mlc = mlc::MLC::new(g,node_map).unwrap();
+        let mlc = mlc::MLC::new(g).unwrap();
         let bags = mlc.run_resetted(0);
         let expected_result = mlc::read_bags("testdata/results.csv").unwrap();
         assert!(bags == expected_result);

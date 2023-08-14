@@ -34,6 +34,7 @@ fn main() -> Result<()> {
 }
 
 const PRICE_INCREMENT_INTERVAL: u64 = 30;
+#[allow(dead_code)]
 fn update_label_func(
     old_label: &bag::Label<usize>,
     new_label: &bag::Label<usize>,
@@ -68,13 +69,16 @@ fn run_mlc() {
     let g = read::read_graph_with_int_ids(&path).unwrap();
 
     println!("Creating MLC runner");
+    #[allow(unused_mut)]
     let mut mlc = mlc::MLC::new(g).unwrap();
-    mlc.set_update_label_func(update_label_func);
+    // mlc.set_update_label_func(update_label_func);
     // mlc.set_debug(true);
     println!("Running MLC");
     let start = Instant::now();
-    let bags = mlc.run_resetted(0);
+    #[allow(unused_variables)]
+    mlc.set_start_node(0);
+    let bags = mlc.run().unwrap();
     let end = Instant::now();
     println!("MLC took {}ms", (end - start).as_millis());
-    // mlc::write_bags(&bags, "data/labels.csv").unwrap();
+    mlc::write_bags(&bags, "data/labels.csv").unwrap();
 }

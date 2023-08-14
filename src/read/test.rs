@@ -7,7 +7,8 @@ mod tests {
 
     #[test]
     fn test_read_graph() {
-        let (_, node_map) = read::read_graph_and_reset_ids("testdata/edges_high_index.csv").unwrap();
+        let (_, node_map) =
+            read::read_graph_and_reset_ids("testdata/edges_high_index.csv").unwrap();
         let expected_node_map = BiMap::from_iter(vec![
             ("10".to_string(), 0),
             ("11".to_string(), 1),

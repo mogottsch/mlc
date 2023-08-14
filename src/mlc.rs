@@ -153,6 +153,17 @@ impl MLC {
         while let Some(label) = queue.pop() {
             let node_id = label.node_id;
 
+            // check if this label is still in the bag of its node, if not, we can skip it
+            // to speed up the algorithm (~20%)
+            if !bags
+                .get(&node_id)
+                .expect("node_id should be in bags")
+                .labels
+                .contains(&label)
+            {
+                continue;
+            }
+
             for edge in self.graph.edges(NodeIndex::new(node_id)) {
                 let old_label = label.clone();
                 let mut new_label = label.new_along(&edge);

@@ -1,5 +1,6 @@
 use bag::WeightsTuple;
 use color_eyre::eyre::Result;
+use log::info;
 use petgraph::dot::{Config, Dot};
 use petgraph::Graph;
 use std::error::Error;
@@ -23,62 +24,27 @@ fn render_graph(g: &Graph<(), WeightsTuple>, path: &str) -> Result<(), Box<dyn E
 fn main() -> Result<()> {
     color_eyre::install()?;
     run_mlc();
-    // let path = "/home/moritz/dev/uni/mcr-py/data/mlc_edges.csv";
-    // println!("Reading graph from {}", path);
-    // let (g, _) = read::read_graph(&path).unwrap();
-    //
-    // if let Err(e) = render_graph(&g, "data/graph.dot") {
-    //     println!("Error rendering graph: {}", e);
-    // }
     Ok(())
 }
 
-const PRICE_INCREMENT_INTERVAL: u64 = 30;
-#[allow(dead_code)]
-fn update_label_func(
-    old_label: &bag::Label<usize>,
-    new_label: &bag::Label<usize>,
-) -> bag::Label<usize> {
-    let old_hidden_values = old_label.hidden_values.clone().unwrap();
-    let old_bicycle_duration = old_hidden_values[0];
-    let old_bicycle_duration_minutes = old_bicycle_duration / 1000 / 60;
-
-    let old_price_increment_intervals = old_bicycle_duration_minutes / PRICE_INCREMENT_INTERVAL;
-
-    let new_hidden_values = new_label.hidden_values.clone().unwrap();
-    let new_bicycle_duration = new_hidden_values[0];
-    let new_bicycle_duration_minutes = new_bicycle_duration / 1000 / 60;
-
-    let new_price_increment_intervals = new_bicycle_duration_minutes / PRICE_INCREMENT_INTERVAL;
-
-    let price_increment = new_price_increment_intervals - old_price_increment_intervals;
-    let new_price = new_label.values[1] + price_increment;
-    let new_values = vec![new_label.values[0], new_price];
-    bag::Label {
-        node_id: new_label.node_id,
-        path: new_label.path.clone(),
-        values: new_values,
-        hidden_values: new_label.hidden_values.clone(),
-    }
-}
 #[allow(dead_code)]
 fn run_mlc() {
     let path = std::env::args().nth(1).unwrap();
     // let path = "/home/moritz/dev/uni/mcr-py/data/mlc_edges.csv";
-    println!("Reading graph from {}", path);
+    info!("Reading graph from {}", path);
     let g = read::read_graph_with_int_ids(&path).unwrap();
 
-    println!("Creating MLC runner");
+    info!("Creating MLC runner");
     #[allow(unused_mut)]
-    let mut mlc = mlc::MLC::new(g).unwrap();
+    let mut mlc = mlc::MLC::new(&g).unwrap();
     // mlc.set_update_label_func(update_label_func);
     // mlc.set_debug(true);
-    println!("Running MLC");
+    info!("Running MLC");
     let start = Instant::now();
     #[allow(unused_variables)]
     mlc.set_start_node(0);
     let bags = mlc.run().unwrap();
     let end = Instant::now();
-    println!("MLC took {}ms", (end - start).as_millis());
+    info!("MLC took {}ms", (end - start).as_millis());
     mlc::write_bags(&bags, "data/labels.csv").unwrap();
 }

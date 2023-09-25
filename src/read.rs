@@ -2,7 +2,7 @@ mod test;
 
 use bimap::BiMap;
 use petgraph::Graph;
-use petgraph::{graph::NodeIndex, Undirected};
+use petgraph::{graph::NodeIndex, Directed};
 use serde::{de, Deserialize, Deserializer};
 use std::{error::Error, str::FromStr};
 
@@ -24,7 +24,7 @@ struct Edge {
     hidden_weights: Option<Weights>,
 }
 
-type MLCGraph = Graph<(), WeightsTuple, Undirected>;
+type MLCGraph = Graph<(), WeightsTuple, Directed>;
 
 // Reads a graph from a csv file. The csv file should have the following format:
 // u,v,weights,hidden_weights
@@ -66,13 +66,13 @@ pub fn read_graph_and_reset_ids(
         })
         .collect::<Vec<_>>();
 
-    let g = Graph::<(), WeightsTuple, Undirected>::from_edges(translated_edges.iter().map(|e| {
+    let g = Graph::<(), WeightsTuple, Directed>::from_edges(translated_edges.iter().map(|e| {
         (
             NodeIndex::new(e.u),
             NodeIndex::new(e.v),
             WeightsTuple {
                 weights: e.weights.clone().0,
-                hidden_weights: e.hidden_weights.clone().map(|w| w.0),
+                hidden_weights: e.hidden_weights.clone().map(|w| w.0).unwrap_or(vec![]),
             },
         )
     }));
@@ -91,13 +91,13 @@ pub fn read_graph_with_int_ids(path: &str) -> Result<MLCGraph, Box<dyn Error>> {
         edges.push(edge);
     }
 
-    let g = Graph::<(), WeightsTuple, Undirected>::from_edges(edges.iter().map(|e| {
+    let g = Graph::<(), WeightsTuple, Directed>::from_edges(edges.iter().map(|e| {
         (
             NodeIndex::new(e.u),
             NodeIndex::new(e.v),
             WeightsTuple {
                 weights: e.weights.clone().0,
-                hidden_weights: e.hidden_weights.clone().map(|w| w.0),
+                hidden_weights: e.hidden_weights.clone().map(|w| w.0).unwrap_or(vec![]),
             },
         )
     }));

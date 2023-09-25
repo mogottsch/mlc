@@ -1,8 +1,9 @@
 use crate::bag::*;
 use bimap::BiMap;
+use log::{debug, info};
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
-use petgraph::{Graph, Undirected};
+use petgraph::{Directed, Graph};
 use std::collections::{BinaryHeap, HashMap};
 use std::error::Error;
 use std::fmt;
@@ -18,16 +19,19 @@ mod test;
 
 type UpdateLabelFunc = fn(&Label<usize>, &Label<usize>) -> Label<usize>;
 
-pub struct MLC {
+pub struct MLC<'a> {
     // problem state
-    graph: Graph<(), WeightsTuple, Undirected>,
-    node_map: Option<BiMap<String, usize>>,
+    graph: &'a Graph<(), WeightsTuple, Directed>,
     update_label_func: Option<UpdateLabelFunc>,
+
+    // config
+    node_map: Option<BiMap<String, usize>>,
     debug: bool,
+    disable_paths: bool,
 
     // helper variables
-    label_length: usize,
-    hidden_label_length: usize,
+    weight_length: usize,
+    hidden_weights_length: usize,
 
     // internal state
     bags: Bags<usize>,
@@ -41,6 +45,7 @@ pub enum MLCError {
     StartNodeNotFound(String),
     NodeMapNotSet,
     UnknownNodeId(usize),
+    EmptyStartingQueue,
 }
 
 impl fmt::Display for MLCError {
@@ -51,39 +56,41 @@ impl fmt::Display for MLCError {
             }
             MLCError::NodeMapNotSet => write!(f, "Node map not set"),
             MLCError::UnknownNodeId(node_id) => write!(f, "Unknown node id: {}", node_id),
+            MLCError::EmptyStartingQueue => write!(
+                f,
+                "Starting queue is empty. Specify either a start node or a starting queue."
+            ),
         }
     }
 }
 
 impl Error for MLCError {}
 
-impl MLC {
-    pub fn new(g: Graph<(), WeightsTuple, Undirected>) -> Result<MLC, Box<dyn Error>> {
+impl MLC<'_> {
+    pub fn new(g: &Graph<(), WeightsTuple, Directed>) -> Result<MLC, Box<dyn Error>> {
         if g.edge_count() == 0 {
             return Err("Graph has no edges".into());
         }
 
-        let mut n_labels = usize::MAX;
-        let mut n_hidden_labels = usize::MAX;
+        let mut n_weights = usize::MAX;
+        let mut n_hidden_weights = usize::MAX;
 
         for node in g.node_indices() {
             for edge in g.edges(node) {
-                if n_labels == usize::MAX {
-                    n_labels = edge.weight().weights.len();
+                if n_weights == usize::MAX {
+                    n_weights = edge.weight().weights.len();
                     continue;
                 }
-                if n_labels != edge.weight().weights.len() {
+                if n_weights != edge.weight().weights.len() {
                     return Err("Graph has inconsistent edge weights".into());
                 }
 
-                if let Some(hidden_weights) = edge.weight().hidden_weights.as_ref() {
-                    if n_hidden_labels == usize::MAX {
-                        n_hidden_labels = hidden_weights.len();
-                        continue;
-                    }
-                    if n_hidden_labels != hidden_weights.len() {
-                        return Err("Graph has inconsistent hidden edge weights".into());
-                    }
+                if n_hidden_weights == usize::MAX {
+                    n_hidden_weights = edge.weight().hidden_weights.len();
+                    continue;
+                }
+                if n_hidden_weights != edge.weight().hidden_weights.len() {
+                    return Err("Graph has inconsistent hidden edge weights".into());
                 }
             }
         }
@@ -92,9 +99,10 @@ impl MLC {
             graph: g,
             bags: HashMap::new(),
             queue: BinaryHeap::new(),
-            label_length: n_labels,
+            weight_length: n_weights,
             node_map: None,
-            hidden_label_length: n_hidden_labels,
+            disable_paths: false,
+            hidden_weights_length: n_hidden_weights,
             update_label_func: None,
             debug: false,
         })
@@ -115,18 +123,67 @@ impl MLC {
         self.node_map = Some(node_map);
     }
 
+    pub fn set_disable_paths(&mut self, disable_paths: bool) {
+        self.disable_paths = disable_paths;
+    }
+
+    /// Sets the starting bags and derives the starting queue from them.
+    ///
+    /// The bags should be in a consistent state, meaning that the labels in the bags should
+    /// not dominate each other.
+    ///
+    /// # Arguments
+    ///
+    /// * `bags` - A HashMap of bags, where the key is the node id and the value is the bag.
     pub fn set_bags(&mut self, bags: Bags<usize>) {
+        assert!(!bags.is_empty());
         self.bags = bags;
+        for bag in self.bags.values() {
+            for label in &bag.labels {
+                // check that the node is in the graph
+                assert!(
+                    self.graph
+                        .node_weight(NodeIndex::new(label.node_id))
+                        .unwrap()
+                        == &(),
+                );
+                self.queue.push(label.clone());
+            }
+        }
+
+        // validate for a sample label, that the label length is correct
+        // let sample_label = self.queue.peek().unwrap();
+        // assert_eq!(sample_label.values.len(), self.weight_length);
+        // assert_eq!(sample_label.hidden_values.len(), self.hidden_weights_length);
     }
 
     pub fn set_start_node(&mut self, start_node: usize) {
-        let hidden_values = if self.hidden_label_length != usize::MAX {
-            Some(vec![0; self.hidden_label_length])
+        let hidden_values = vec![0; self.hidden_weights_length];
+
+        let start_path = if self.disable_paths {
+            vec![]
         } else {
-            None
+            vec![start_node]
         };
         let start_label = Label {
-            values: vec![0; self.label_length],
+            values: vec![0; self.weight_length],
+            hidden_values,
+            path: start_path,
+            node_id: start_node,
+        };
+        self.queue.push(start_label.clone());
+        self.bags
+            .insert(start_node, Bag::new_start_bag(start_label));
+    }
+
+    pub fn set_start_node_with_time(&mut self, start_node: usize, time: usize) {
+        if self.hidden_weights_length != 0 {
+            panic!("set_start_node_with_time can only be used with no hidden labels");
+        }
+        let hidden_values = vec![0; self.hidden_weights_length];
+
+        let start_label = Label {
+            values: vec![time.try_into().unwrap()],
             hidden_values,
             path: vec![start_node],
             node_id: start_node,
@@ -156,8 +213,6 @@ impl MLC {
     /// # Returns
     /// * `Bags<usize>` - The bags of each node.
     pub fn run(&mut self) -> Result<&Bags<usize>, MLCError> {
-        // get queue from self
-
         let mut counter = 0;
         let mut time = Instant::now();
 
@@ -178,7 +233,7 @@ impl MLC {
 
             for edge in self.graph.edges(NodeIndex::new(node_id)) {
                 let old_label = label.clone();
-                let mut new_label = label.new_along(&edge);
+                let mut new_label = label.new_along(&edge, self.disable_paths);
                 if let Some(update_label_func) = self.update_label_func {
                     new_label = update_label_func(&old_label, &new_label);
                 }
@@ -195,11 +250,11 @@ impl MLC {
             // print queue size every 1000 iterations
             // if debug is enabled, write labels to csv every 10 seconds
             if counter % 1000 == 0 {
-                println!("queue size: {}", self.queue.len());
+                debug!("queue size: {}", self.queue.len());
                 if self.debug {
                     let duration = time.elapsed();
                     if duration.as_secs() > 10 {
-                        println!("writing labels to csv");
+                        info!("writing labels to csv");
                         write_bags(&self.translate_bags(&self.bags), "data/labels.csv").unwrap();
                         time = Instant::now();
                     }
@@ -294,7 +349,7 @@ pub fn read_bags(path: &str) -> Result<Bags<usize>, Box<dyn Error>> {
         let label_entry: LabelEntry = line.parse()?;
         let label = Label {
             values: label_entry.values.clone(),
-            hidden_values: None,
+            hidden_values: vec![],
             path: label_entry.path.clone(),
             node_id: label_entry.node_id,
         };
@@ -317,9 +372,7 @@ pub fn write_bags<T: Eq + Hash + Display>(
     for bag in bags.values() {
         for label in bag.labels.iter() {
             let mut values = label.values.clone();
-            if let Some(hidden_values) = &label.hidden_values {
-                values.extend(hidden_values);
-            }
+            values.extend(label.hidden_values.clone());
             let line = format!(
                 "{}|{}|{}\n",
                 label.node_id,

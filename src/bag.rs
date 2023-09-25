@@ -13,22 +13,32 @@ pub type UntranslatedNodeId = String;
 #[derive(Debug, Clone)]
 pub struct Weights(pub Vec<Weight>);
 
+impl From<Vec<u64>> for Weights {
+    fn from(v: Vec<u64>) -> Self {
+        Weights(v)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct WeightsTuple {
     pub weights: Vec<Weight>,
-    pub hidden_weights: Option<Vec<Weight>>,
+    pub hidden_weights: Vec<Weight>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Label<T> {
     pub values: Vec<u64>,
-    pub hidden_values: Option<Vec<u64>>,
+    pub hidden_values: Vec<u64>,
     pub path: Vec<T>,
     pub node_id: T,
 }
 
 impl Label<NodeId> {
-    pub fn new_along(&self, edge: &EdgeReference<WeightsTuple>) -> Label<NodeId> {
+    pub fn new_along(
+        &self,
+        edge: &EdgeReference<WeightsTuple>,
+        disable_path: bool,
+    ) -> Label<NodeId> {
         let weight = edge.weight();
         let values = self
             .values
@@ -36,19 +46,22 @@ impl Label<NodeId> {
             .zip(weight.weights.iter())
             .map(|(a, b)| a + b)
             .collect();
-        let hidden_values = self.hidden_values.as_ref().and_then(|hidden_values| {
-            weight.hidden_weights.as_ref().map(|hidden_weights| {
-                hidden_values
-                    .iter()
-                    .zip(hidden_weights.iter())
-                    .map(|(a, b)| a + b)
-                    .collect()
-            })
-        });
+        let hidden_values = self
+            .hidden_values
+            .iter()
+            .zip(weight.hidden_weights.iter())
+            .map(|(a, b)| a + b)
+            .collect();
 
-        let mut path = self.path.clone();
+        let mut path = if disable_path {
+            vec![]
+        } else {
+            self.path.clone()
+        };
         let target_node_id = edge.target().index();
-        path.push(target_node_id);
+        if !disable_path {
+            path.push(self.node_id);
+        }
         Label {
             values,
             path,
@@ -65,17 +78,6 @@ impl Label<NodeId> {
             .iter()
             .zip(other.values.iter())
             .all(|(a, b)| a <= b)
-    }
-
-    pub fn has_cycle(&self) -> bool {
-        let mut visited = HashSet::new();
-        for node in &self.path {
-            if visited.contains(node) {
-                return true;
-            }
-            visited.insert(node);
-        }
-        false
     }
 }
 
@@ -117,7 +119,7 @@ impl<T> Hash for Label<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Bag<T: Eq + Hash> {
     pub labels: HashSet<Label<T>>,
 }

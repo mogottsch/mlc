@@ -6,37 +6,37 @@ mod tests {
     fn test_weakly_dominates() {
         let label1 = Label {
             values: vec![1, 2, 3],
-            hidden_values: None,
+            hidden_values: vec![],
             path: vec![0, 1, 2],
             node_id: 2,
         };
         let label2 = Label {
             values: vec![1, 2, 3],
-            hidden_values: None,
+            hidden_values: vec![],
             path: vec![0, 1, 2],
             node_id: 2,
         };
         let label3 = Label {
             values: vec![2, 3, 4],
-            hidden_values: None,
+            hidden_values: vec![],
             path: vec![0, 1, 2],
             node_id: 2,
         };
         let label4 = Label {
             values: vec![1, 2, 4],
-            hidden_values: None,
+            hidden_values: vec![],
             path: vec![0, 1, 2],
             node_id: 2,
         };
         let label_bug_1 = Label {
             values: vec![1852375, 0],
-            hidden_values: None,
+            hidden_values: vec![],
             path: vec![0],
             node_id: 1,
         };
         let label_bug_2 = Label {
             values: vec![2003938, 0],
-            hidden_values: None,
+            hidden_values: vec![],
             path: vec![0],
             node_id: 1,
         };
@@ -55,13 +55,13 @@ mod tests {
         let mut bag = Bag::new_empty();
         let label1 = Label {
             values: vec![1, 2, 3],
-            hidden_values: None,
+            hidden_values: vec![],
             path: vec![0, 1, 2],
             node_id: 2,
         };
         let label2 = Label {
             values: vec![2, 3, 4],
-            hidden_values: None,
+            hidden_values: vec![],
             path: vec![0, 1, 2],
             node_id: 2,
         };
@@ -74,7 +74,7 @@ mod tests {
 
         let label3 = Label {
             values: vec![0, 1, 6],
-            hidden_values: None,
+            hidden_values: vec![],
             path: vec![0, 1, 2],
             node_id: 2,
         };
@@ -91,19 +91,19 @@ mod tests {
         let mut bag = Bag::new_empty();
         let label1 = Label {
             values: vec![1, 2, 5],
-            hidden_values: None,
+            hidden_values: vec![],
             path: vec![0, 1, 2],
             node_id: 2,
         };
         let label2 = Label {
             values: vec![2, 3, 4],
-            hidden_values: None,
+            hidden_values: vec![],
             path: vec![0, 1, 2],
             node_id: 2,
         };
         let label3 = Label {
             values: vec![0, 0, 0],
-            hidden_values: None,
+            hidden_values: vec![],
             path: vec![0, 1, 2],
             node_id: 2,
         };

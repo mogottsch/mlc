@@ -217,6 +217,10 @@ impl MLC<'_> {
         let mut time = Instant::now();
 
         while let Some(label) = self.queue.pop() {
+            if self.exceeds_limit(&label) {
+                continue;
+            }
+
             let node_id = label.node_id;
 
             // check if this label is still in the bag of its node, if not, we can skip it
@@ -242,6 +246,7 @@ impl MLC<'_> {
                     .entry(edge.target().index())
                     .or_insert_with(Bag::new_empty);
                 if target_bag.add_if_necessary(new_label.clone()) {
+                    self.update_limits(&new_label);
                     self.queue.push(new_label);
                 }
             }
@@ -306,6 +311,14 @@ impl MLC<'_> {
         for (key, value) in node_map {
             writeln!(file, "{},{}", key, value).unwrap();
         }
+    }
+
+    fn exceeds_limit(&self, _label: &Label<usize>) -> bool {
+        return false;
+    }
+
+    fn update_limits(&self, _label: &Label<usize>) {
+        // do nothing
     }
 }
 

@@ -24,7 +24,7 @@ struct Edge {
     hidden_weights: Option<Weights>,
 }
 
-type MLCGraph = Graph<(), WeightsTuple, Directed>;
+pub type MLCGraph<T> = Graph<Vec<T>, WeightsTuple, Directed>;
 
 // Reads a graph from a csv file. The csv file should have the following format:
 // u,v,weights,hidden_weights
@@ -34,7 +34,7 @@ type MLCGraph = Graph<(), WeightsTuple, Directed>;
 // The weights and hidden_weights columns must be a comma-separated list of integers.
 pub fn read_graph_and_reset_ids(
     path: &str,
-) -> Result<(MLCGraph, BiMap<String, usize>), Box<dyn Error>> {
+) -> Result<(MLCGraph<()>, BiMap<String, usize>), Box<dyn Error>> {
     // let mut rdr = csv::Reader::from_path(path)?;
     let mut rdr = csv::ReaderBuilder::new().quote(b'"').from_path(path)?;
 
@@ -66,22 +66,23 @@ pub fn read_graph_and_reset_ids(
         })
         .collect::<Vec<_>>();
 
-    let g = Graph::<(), WeightsTuple, Directed>::from_edges(translated_edges.iter().map(|e| {
-        (
-            NodeIndex::new(e.u),
-            NodeIndex::new(e.v),
-            WeightsTuple {
-                weights: e.weights.clone().0,
-                hidden_weights: e.hidden_weights.clone().map(|w| w.0).unwrap_or(vec![]),
-            },
-        )
-    }));
+    let g =
+        Graph::<Vec<()>, WeightsTuple, Directed>::from_edges(translated_edges.iter().map(|e| {
+            (
+                NodeIndex::new(e.u),
+                NodeIndex::new(e.v),
+                WeightsTuple {
+                    weights: e.weights.clone().0,
+                    hidden_weights: e.hidden_weights.clone().map(|w| w.0).unwrap_or(vec![]),
+                },
+            )
+        }));
     Ok((g, node_map))
 }
 
 // Like read_graph_unresetted, but the node ids must be integers from 0 to n-1, where n is the
 // number of nodes in the graph. This function is faster than read_graph_unresetted.
-pub fn read_graph_with_int_ids(path: &str) -> Result<MLCGraph, Box<dyn Error>> {
+pub fn read_graph_with_int_ids(path: &str) -> Result<MLCGraph<()>, Box<dyn Error>> {
     // let mut rdr = csv::Reader::from_path(path)?;
     let mut rdr = csv::ReaderBuilder::new().quote(b'"').from_path(path)?;
 
@@ -91,7 +92,7 @@ pub fn read_graph_with_int_ids(path: &str) -> Result<MLCGraph, Box<dyn Error>> {
         edges.push(edge);
     }
 
-    let g = Graph::<(), WeightsTuple, Directed>::from_edges(edges.iter().map(|e| {
+    let g = Graph::<Vec<()>, WeightsTuple, Directed>::from_edges(edges.iter().map(|e| {
         (
             NodeIndex::new(e.u),
             NodeIndex::new(e.v),

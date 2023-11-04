@@ -2,18 +2,18 @@ mod test;
 use std::collections::HashMap;
 
 #[derive(Debug)]
-pub struct Limits<T: std::cmp::Eq + std::hash::Hash> {
+pub struct Limits<T: std::cmp::Eq + std::hash::Hash + std::marker::Copy> {
     pub limits: HashMap<T, Vec<Limit>>,
-    pub limit_cache: HashMap<u32, u32>,
+    pub limit_cache: HashMap<u64, u64>,
 }
 
 #[derive(Debug)]
 pub struct Limit {
-    pub cost: u32,
-    pub time: u32,
+    pub cost: u64,
+    pub time: u64,
 }
 
-impl<T: std::cmp::Eq + std::hash::Hash> Limits<T> {
+impl<T: std::cmp::Eq + std::hash::Hash + std::marker::Copy> Limits<T> {
     pub fn new() -> Limits<T> {
         Limits {
             limits: HashMap::new(),
@@ -23,9 +23,15 @@ impl<T: std::cmp::Eq + std::hash::Hash> Limits<T> {
 
     pub fn add_category(&mut self, category: T) {
         self.limits.insert(category, Vec::new());
+        self.update_limit(category, u64::max_value(), u64::max_value());
     }
 
-    pub fn update_limit(&mut self, category: T, cost: u32, time: u32) -> bool {
+    pub fn is_initialized(&self) -> bool {
+        // limits must contain at least category and each category must have at least one limit
+        self.limits.len() > 0 && self.limits.values().all(|v| v.len() > 0)
+    }
+
+    pub fn update_limit(&mut self, category: T, cost: u64, time: u64) -> bool {
         let limit = Limit { cost, time };
         let limits = self.limits.get_mut(&category).unwrap();
         // check if any limit dominates the new limit
@@ -44,8 +50,8 @@ impl<T: std::cmp::Eq + std::hash::Hash> Limits<T> {
         return true;
     }
 
-    // is_limit_exceeded returns true if each category has a limit that dominates the given cost and time
-    pub fn is_limit_exceeded(&mut self, cost: u32, time: u32) -> bool {
+    /// is_limit_exceeded returns true if each category has a limit that dominates the given cost and time
+    pub fn is_limit_exceeded(&mut self, cost: u64, time: u64) -> bool {
         if let Some(&limit) = self.limit_cache.get(&cost) {
             return limit <= time;
         }
@@ -54,10 +60,10 @@ impl<T: std::cmp::Eq + std::hash::Hash> Limits<T> {
         return limit <= time;
     }
 
-    fn determine_limit(&mut self, cost: u32) -> u32 {
+    fn determine_limit(&mut self, cost: u64) -> u64 {
         let mut min_limits = Vec::new();
         for limits in self.limits.values() {
-            let mut min_limit = u32::max_value();
+            let mut min_limit = u64::max_value();
             for limit in limits.iter() {
                 if limit.cost <= cost {
                     min_limit = std::cmp::min(min_limit, limit.time);

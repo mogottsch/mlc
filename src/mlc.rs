@@ -1,6 +1,6 @@
 use crate::bag::*;
 use bimap::BiMap;
-use log::{debug, info, warn};
+use log::{debug, info};
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use petgraph::{Directed, Graph};
